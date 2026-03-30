@@ -10,7 +10,7 @@ interface AppHeaderProps {
 
 export function AppHeader({ onMenuToggle }: AppHeaderProps) {
   return (
-    <header className="sticky top-0 z-30 h-14 border-b bg-card/80 backdrop-blur-sm flex items-center px-4 gap-3">
+    <header className="sticky top-0 z-30 h-14 border-b glass-strong flex items-center px-4 gap-3">
       <Button
         variant="ghost"
         size="icon"
@@ -25,7 +25,7 @@ export function AppHeader({ onMenuToggle }: AppHeaderProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search..."
-            className="pl-9 h-9 bg-secondary border-0"
+            className="pl-9 h-9 bg-secondary/60 border-0 rounded-xl"
           />
         </div>
       </div>
@@ -36,11 +36,11 @@ export function AppHeader({ onMenuToggle }: AppHeaderProps) {
         </Button>
         <Button variant="ghost" size="icon" className="h-9 w-9 relative">
           <Bell className="h-4 w-4" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary" />
+          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
         </Button>
         <ThemeToggle />
-        <Avatar className="h-8 w-8 ml-1">
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
+        <Avatar className="h-8 w-8 ml-1 ring-2 ring-primary/20">
+          <AvatarFallback className="gradient-primary text-primary-foreground text-xs font-bold">
             DS
           </AvatarFallback>
         </Avatar>
