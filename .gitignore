@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 *.claude
+.agents
+.continue
+.firebase
+.github
+.env.example
 
 # Editor directories and files
 .vscode/*
