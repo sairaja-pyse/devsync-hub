@@ -11,6 +11,13 @@ const firebaseConfig = {
   appId:             import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error(
+    '[Firebase] Missing environment variables. ' +
+    'Make sure VITE_FIREBASE_* variables are set before building.'
+  );
+}
+
 // Avoid duplicate initialization in HMR
 const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 export const auth = getAuth(app);

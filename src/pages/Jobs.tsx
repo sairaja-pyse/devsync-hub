@@ -61,14 +61,18 @@ export default function Jobs() {
 
   const handleSave = async () => {
     if (!form.company.trim()) { toast.error("Company is required"); return; }
-    if (editing) {
-      await update(editing.id, form);
-      toast.success("Application updated");
-    } else {
-      await add({ ...form });
-      toast.success("Application added");
+    try {
+      if (editing) {
+        await update(editing.id, form);
+        toast.success("Application updated");
+      } else {
+        await add({ ...form });
+        toast.success("Application added");
+      }
+      setDialogOpen(false);
+    } catch {
+      toast.error("Failed to save. Please try again.");
     }
-    setDialogOpen(false);
   };
 
   const handleDelete = async (id: string) => {

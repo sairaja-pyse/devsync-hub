@@ -32,14 +32,18 @@ export default function Goals() {
 
   const handleSave = async () => {
     if (!form.title.trim()) { toast.error("Title is required"); return; }
-    if (editing) {
-      await update(editing.id, form);
-      toast.success("Goal updated");
-    } else {
-      await add({ ...form });
-      toast.success("Goal created");
+    try {
+      if (editing) {
+        await update(editing.id, form);
+        toast.success("Goal updated");
+      } else {
+        await add({ ...form });
+        toast.success("Goal created");
+      }
+      setDialogOpen(false);
+    } catch {
+      toast.error("Failed to save. Please try again.");
     }
-    setDialogOpen(false);
   };
 
   const handleDelete = async (id: string) => { await remove(id); toast.success("Goal deleted"); };

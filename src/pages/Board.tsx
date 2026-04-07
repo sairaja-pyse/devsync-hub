@@ -114,15 +114,19 @@ export default function Board() {
       toast.error("Title is required");
       return;
     }
-    if (editingTask) {
-      await update(editingTask.id, { ...formData });
-      toast.success("Task updated");
-    } else {
-      const colTasks = tasksByColumn[targetColumn] ?? [];
-      await add({ ...formData, columnId: targetColumn, order: colTasks.length });
-      toast.success("Task created");
+    try {
+      if (editingTask) {
+        await update(editingTask.id, { ...formData });
+        toast.success("Task updated");
+      } else {
+        const colTasks = tasksByColumn[targetColumn] ?? [];
+        await add({ ...formData, columnId: targetColumn, order: colTasks.length });
+        toast.success("Task created");
+      }
+      setDialogOpen(false);
+    } catch {
+      toast.error("Failed to save. Please try again.");
     }
-    setDialogOpen(false);
   };
 
   const handleDelete = async (taskId: string) => {

@@ -37,14 +37,18 @@ export default function Skills() {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
-    if (editing) {
-      await update(editing.id, form);
-      toast.success("Skill updated");
-    } else {
-      await add({ ...form });
-      toast.success("Skill added");
+    try {
+      if (editing) {
+        await update(editing.id, form);
+        toast.success("Skill updated");
+      } else {
+        await add({ ...form });
+        toast.success("Skill added");
+      }
+      setDialogOpen(false);
+    } catch {
+      toast.error("Failed to save. Please try again.");
     }
-    setDialogOpen(false);
   };
 
   const handleDelete = async (id: string) => { await remove(id); toast.success("Skill deleted"); };

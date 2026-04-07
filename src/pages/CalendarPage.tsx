@@ -85,16 +85,19 @@ export default function CalendarPage() {
       toast.error("Please select a date");
       return;
     }
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-
-    if (editingEvent) {
-      await update(editingEvent.id, { title: formTitle, description: formDesc, type: formType, date: dateStr });
-      toast.success("Event updated");
-    } else {
-      await add({ title: formTitle, description: formDesc, type: formType, date: dateStr });
-      toast.success("Event created");
+    try {
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      if (editingEvent) {
+        await update(editingEvent.id, { title: formTitle, description: formDesc, type: formType, date: dateStr });
+        toast.success("Event updated");
+      } else {
+        await add({ title: formTitle, description: formDesc, type: formType, date: dateStr });
+        toast.success("Event created");
+      }
+      setDialogOpen(false);
+    } catch {
+      toast.error("Failed to save. Please try again.");
     }
-    setDialogOpen(false);
   }
 
   async function handleDelete(id: string) {

@@ -138,15 +138,19 @@ export default function Projects() {
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Project name is required"); return; }
-    const now = new Date().toISOString();
-    if (editing) {
-      await update(editing.id, { ...form, updatedAt: now, dueDate: form.dueDate || undefined });
-      toast.success("Project updated");
-    } else {
-      await add({ ...form, updatedAt: now, dueDate: form.dueDate || undefined });
-      toast.success("Project created");
+    try {
+      const now = new Date().toISOString();
+      if (editing) {
+        await update(editing.id, { ...form, updatedAt: now, dueDate: form.dueDate || undefined });
+        toast.success("Project updated");
+      } else {
+        await add({ ...form, updatedAt: now, dueDate: form.dueDate || undefined });
+        toast.success("Project created");
+      }
+      setDialogOpen(false);
+    } catch {
+      toast.error("Failed to save. Please try again.");
     }
-    setDialogOpen(false);
   };
 
   const handleDelete = async (id: string) => {

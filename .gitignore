@@ -16,7 +16,7 @@ dist-ssr
 .continue
 .firebase
 .github
-.env.example
+.env
 
 # Editor directories and files
 .vscode/*

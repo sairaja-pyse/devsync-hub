@@ -10,6 +10,8 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  GoogleAuthProvider,
+  signInWithPopup,
   type User,
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -38,6 +40,7 @@ interface AuthContextValue {
   loading: boolean;
   signup:  (name: string, email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   login:   (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  loginWithGoogle: () => Promise<{ ok: boolean; error?: string }>;
   logout:  () => Promise<void>;
   updateProfile: (name: string) => Promise<{ ok: boolean; error?: string }>;
   changePassword: (current: string, next: string) => Promise<{ ok: boolean; error?: string }>;
@@ -50,11 +53,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety timeout: if Firebase never responds (e.g. network issue),
+    // stop the loading spinner after 8 seconds so the UI doesn't hang blank.
+    const timeout = setTimeout(() => setLoading(false), 8000);
+
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+      clearTimeout(timeout);
       setUser(firebaseUser ? toAuthUser(firebaseUser) : null);
       setLoading(false);
     });
-    return unsub;
+
+    return () => {
+      clearTimeout(timeout);
+      unsub();
+    };
   }, []);
 
   const signup = useCallback(async (name: string, email: string, password: string) => {
@@ -75,6 +87,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      return { ok: true };
+    } catch (e: unknown) {
+      return { ok: false, error: firebaseError(e) };
+    }
+  }, []);
+
+  const loginWithGoogle = useCallback(async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const { user: u } = await signInWithPopup(auth, provider);
+      // Create/update user doc in Firestore (no-op if already exists due to merge)
+      await setDoc(doc(db, 'users', u.uid), {
+        name:  u.displayName ?? u.email?.split('@')[0] ?? 'User',
+        email: u.email ?? '',
+      }, { merge: true });
       return { ok: true };
     } catch (e: unknown) {
       return { ok: false, error: firebaseError(e) };
@@ -110,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signup, login, logout, updateProfile, changePassword }}>
+    <AuthContext.Provider value={{ user, loading, signup, login, loginWithGoogle, logout, updateProfile, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

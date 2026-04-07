@@ -48,6 +48,9 @@ import {
   getAllNotes, getAllFolders,
   saveNote, deleteNote as persistDeleteNote,
   createNote, saveFolder, deleteFolder as persistDeleteFolder,
+  syncNoteToFirestore, deleteNoteFromFirestore, loadNotesFromFirestore,
+  syncFolderToFirestore, deleteFolderFromFirestore, loadFoldersFromFirestore,
+  cacheNotes,
 } from '@/lib/noteStorage';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -651,8 +654,21 @@ export default function Notes() {
   const [folders,  setFolders]  = useState<NoteFolder[]>(BUILTIN_FOLDERS);
   useEffect(() => {
     if (!user?.uid) return;
-    setNotes(getAllNotes(user.uid));
-    setFolders(getAllFolders(user.uid));
+    const uid = user.uid;
+    // Show cached data immediately for fast render
+    setNotes(getAllNotes(uid));
+    setFolders(getAllFolders(uid));
+    // Then load from Firestore (source of truth) and update cache
+    loadNotesFromFirestore(uid).then(firestoreNotes => {
+      if (firestoreNotes.length > 0) {
+        cacheNotes(uid, firestoreNotes);
+        setNotes(firestoreNotes);
+      }
+    });
+    loadFoldersFromFirestore(uid).then(customFolders => {
+      for (const f of customFolders) saveFolder(uid, f);
+      setFolders(getAllFolders(uid));
+    });
   }, [user?.uid]);
 
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
@@ -717,9 +733,10 @@ export default function Notes() {
       if (!note) return prev;
       const updated = { ...note, title, contentJson, contentText, updatedAt: now };
       saveNote(uid, updated);
+      if (user?.uid) syncNoteToFirestore(uid, updated);
       return prev.map(n => n.id === id ? updated : n);
     });
-  }, []);
+  }, [uid, user?.uid]);
 
   const scheduleSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -786,11 +803,12 @@ export default function Notes() {
     const fid  = selectedFolderId === 'all' ? 'personal' : selectedFolderId;
     const note = createNote(fid);
     saveNote(uid, note);
+    if (user?.uid) syncNoteToFirestore(uid, note);
     setNotes(prev => [note, ...prev]);
     setSelectedNoteId(note.id);
     if (window.innerWidth < 768) setMobileView('editor');
     setTimeout(() => titleInputRef.current?.focus(), 80);
-  }, [selectedFolderId]);
+  }, [selectedFolderId, uid, user?.uid]);
 
   const handleSelectNote = useCallback((id: string) => {
     setSelectedNoteId(id);
@@ -799,6 +817,7 @@ export default function Notes() {
 
   const handleDeleteNote = useCallback((id: string) => {
     persistDeleteNote(uid, id);
+    if (user?.uid) deleteNoteFromFirestore(uid, id);
     setNotes(prev => prev.filter(n => n.id !== id));
     if (selectedNoteId === id) {
       setSelectedNoteId(null);
@@ -807,16 +826,19 @@ export default function Notes() {
     }
     toast.success('Note deleted');
     setDeleteNoteTarget(null);
-  }, [selectedNoteId]);
+  }, [selectedNoteId, uid, user?.uid]);
 
   const handleTogglePin = useCallback((id: string) => {
     setNotes(prev => {
       const updated = prev.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n);
       const note    = updated.find(n => n.id === id);
-      if (note) saveNote(uid, note);
+      if (note) {
+        saveNote(uid, note);
+        if (user?.uid) syncNoteToFirestore(uid, note);
+      }
       return updated;
     });
-  }, []);
+  }, [uid, user?.uid]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -844,6 +866,7 @@ export default function Notes() {
       colorClass: newFolderColor,
     };
     saveFolder(uid, folder);
+    if (user?.uid) syncFolderToFirestore(uid, folder);
     setFolders(getAllFolders(uid));
     setNewFolderName('');
     setNewFolderColor('apple-icon-blue');
@@ -853,12 +876,13 @@ export default function Notes() {
 
   const handleDeleteFolder = useCallback((id: string) => {
     persistDeleteFolder(uid, id);
+    if (user?.uid) deleteFolderFromFirestore(uid, id);
     setFolders(getAllFolders(uid));
     setNotes(getAllNotes(uid));
     if (selectedFolderId === id) setSelectedFolderId('all');
     toast.success('Folder deleted');
     setDeleteFolderTarget(null);
-  }, [selectedFolderId]);
+  }, [selectedFolderId, uid, user?.uid]);
 
   // Image insert from file
   const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
