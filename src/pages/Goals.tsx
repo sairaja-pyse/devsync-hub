@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Target, Pencil, Trash2 } from "lucide-react";
+import { useCollection } from "@/hooks/useCollection";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -18,18 +19,10 @@ interface Goal {
   category: string;
 }
 
-const initialGoals: Goal[] = [
-  { id: "1", title: "Crack SDE Job", description: "Prepare for top tech companies", progress: 65, targetDate: "2026-06-01", category: "Career" },
-  { id: "2", title: "Learn System Design", description: "Master distributed systems concepts", progress: 40, targetDate: "2026-08-01", category: "Learning" },
-  { id: "3", title: "Master TypeScript", description: "Advanced TS patterns and generics", progress: 80, targetDate: "2026-05-01", category: "Skills" },
-  { id: "4", title: "Improve DSA", description: "Solve 300+ LeetCode problems", progress: 55, targetDate: "2026-07-01", category: "Preparation" },
-  { id: "5", title: "Become Senior Engineer", description: "Build leadership and architecture skills", progress: 25, targetDate: "2027-01-01", category: "Career" },
-];
-
 const emptyGoal = { title: "", description: "", progress: 0, targetDate: "", category: "" };
 
 export default function Goals() {
-  const [goals, setGoals] = useState<Goal[]>(initialGoals);
+  const { items: goals, add, update, remove } = useCollection<Goal>('goals', '_createdAt', 'desc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Goal | null>(null);
   const [form, setForm] = useState(emptyGoal);
@@ -37,19 +30,19 @@ export default function Goals() {
   const openCreate = () => { setEditing(null); setForm(emptyGoal); setDialogOpen(true); };
   const openEdit = (g: Goal) => { setEditing(g); setForm({ title: g.title, description: g.description, progress: g.progress, targetDate: g.targetDate, category: g.category }); setDialogOpen(true); };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim()) { toast.error("Title is required"); return; }
     if (editing) {
-      setGoals(goals.map((g) => g.id === editing.id ? { ...g, ...form } : g));
+      await update(editing.id, form);
       toast.success("Goal updated");
     } else {
-      setGoals([...goals, { id: crypto.randomUUID(), ...form }]);
+      await add({ ...form });
       toast.success("Goal created");
     }
     setDialogOpen(false);
   };
 
-  const handleDelete = (id: string) => { setGoals(goals.filter((g) => g.id !== id)); toast.success("Goal deleted"); };
+  const handleDelete = async (id: string) => { await remove(id); toast.success("Goal deleted"); };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">

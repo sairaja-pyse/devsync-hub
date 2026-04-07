@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Sparkles, Pencil, Trash2 } from "lucide-react";
+import { useCollection } from "@/hooks/useCollection";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -17,15 +18,6 @@ interface Skill {
   progress: number;
 }
 
-const initialSkills: Skill[] = [
-  { id: "1", name: "Data Structures & Algorithms", level: "Intermediate", progress: 65 },
-  { id: "2", name: "Frontend (React)", level: "Advanced", progress: 85 },
-  { id: "3", name: "Backend (Node.js)", level: "Intermediate", progress: 60 },
-  { id: "4", name: "System Design", level: "Beginner", progress: 30 },
-  { id: "5", name: "DevOps", level: "Beginner", progress: 20 },
-  { id: "6", name: "TypeScript", level: "Advanced", progress: 80 },
-];
-
 const levelColor: Record<string, string> = {
   Beginner: "bg-info/10 text-info border-info/20",
   Intermediate: "bg-warning/10 text-warning border-warning/20",
@@ -35,7 +27,7 @@ const levelColor: Record<string, string> = {
 const emptySkill = { name: "", level: "Beginner" as const, progress: 0 };
 
 export default function Skills() {
-  const [skills, setSkills] = useState<Skill[]>(initialSkills);
+  const { items: skills, add, update, remove } = useCollection<Skill>('skills', '_createdAt', 'desc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Skill | null>(null);
   const [form, setForm] = useState<Omit<Skill, "id">>(emptySkill);
@@ -43,19 +35,19 @@ export default function Skills() {
   const openCreate = () => { setEditing(null); setForm(emptySkill); setDialogOpen(true); };
   const openEdit = (s: Skill) => { setEditing(s); setForm({ name: s.name, level: s.level, progress: s.progress }); setDialogOpen(true); };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
     if (editing) {
-      setSkills(skills.map((s) => s.id === editing.id ? { ...s, ...form } : s));
+      await update(editing.id, form);
       toast.success("Skill updated");
     } else {
-      setSkills([...skills, { id: crypto.randomUUID(), ...form }]);
+      await add({ ...form });
       toast.success("Skill added");
     }
     setDialogOpen(false);
   };
 
-  const handleDelete = (id: string) => { setSkills(skills.filter((s) => s.id !== id)); toast.success("Skill deleted"); };
+  const handleDelete = async (id: string) => { await remove(id); toast.success("Skill deleted"); };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">

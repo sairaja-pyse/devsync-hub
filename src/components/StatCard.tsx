@@ -8,58 +8,92 @@ interface StatCardProps {
   icon: LucideIcon;
   trend?: { value: string; positive: boolean };
   gradient?: "blue" | "green" | "amber" | "purple";
+  iconColor?: string; /* e.g. "apple-icon-blue" */
   className?: string;
 }
 
-const gradientMap = {
-  blue: "gradient-card-blue",
-  green: "gradient-card-green",
-  amber: "gradient-card-amber",
-  purple: "gradient-card-purple",
+// Maps to Apple system icon gradients
+const iconGradientMap: Record<string, string> = {
+  blue:   "apple-icon-blue",
+  green:  "apple-icon-green",
+  amber:  "apple-icon-orange",
+  purple: "apple-icon-purple",
 };
 
-const iconBgMap = {
-  blue: "bg-primary/15 text-primary",
-  green: "bg-success/15 text-success",
-  amber: "bg-warning/15 text-warning",
-  purple: "bg-[hsl(var(--primary-glow))]/15 text-[hsl(var(--primary-glow))]",
-};
+export function StatCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  trend,
+  gradient = "blue",
+  iconColor,
+  className,
+}: StatCardProps) {
+  const iconClass = iconColor ?? iconGradientMap[gradient];
 
-export function StatCard({ title, value, subtitle, icon: Icon, trend, gradient = "blue", className }: StatCardProps) {
   return (
     <div
       className={cn(
-        "group relative rounded-2xl border bg-card p-4 sm:p-5 hover-lift overflow-hidden",
-        gradientMap[gradient],
+        "apple-widget-hover group relative overflow-hidden p-4 sm:p-5",
         className
       )}
     >
-      {/* Subtle glow orb */}
-      <div className="absolute -top-8 -right-8 h-24 w-24 rounded-full bg-primary/5 blur-2xl group-hover:bg-primary/10 transition-colors duration-500" />
+      {/* Subtle top-right glow tint */}
+      <div
+        className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl"
+        style={{
+          background:
+            gradient === "blue"   ? "rgba(0,122,255,0.12)"   :
+            gradient === "green"  ? "rgba(52,199,89,0.12)"   :
+            gradient === "amber"  ? "rgba(255,149,0,0.12)"   :
+                                    "rgba(175,82,222,0.12)",
+        }}
+      />
 
-      <div className="relative flex items-start justify-between">
-        <div className="space-y-1">
-          <p className="text-xs sm:text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-2xl sm:text-3xl font-extrabold tracking-tight">{value}</p>
-          {subtitle && (
-            <p className="text-[11px] sm:text-xs text-muted-foreground">{subtitle}</p>
+      {/* Icon row */}
+      <div className="flex items-start justify-between mb-3">
+        {/* Squircle icon */}
+        <div
+          className={cn(
+            "h-11 w-11 sm:h-12 sm:w-12 squircle-md flex items-center justify-center shrink-0 shadow-sm",
+            "transition-transform duration-300 group-hover:scale-105",
+            iconClass
           )}
-          {trend && (
-            <p className={cn(
-              "text-[11px] sm:text-xs font-semibold flex items-center gap-0.5",
-              trend.positive ? "text-success" : "text-destructive"
-            )}>
-              <span className="text-sm">{trend.positive ? "↑" : "↓"}</span> {trend.value}
-            </p>
-          )}
+        >
+          <Icon className="h-5 w-5 sm:h-[22px] sm:w-[22px] text-white" strokeWidth={2} />
         </div>
-        <div className={cn(
-          "h-10 w-10 sm:h-11 sm:w-11 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-110",
-          iconBgMap[gradient]
-        )}>
-          <Icon className="h-5 w-5 sm:h-[22px] sm:w-[22px]" />
-        </div>
+
+        {/* Trend badge */}
+        {trend && (
+          <span
+            className={cn(
+              "text-[11px] font-semibold px-2 py-0.5 rounded-full",
+              trend.positive
+                ? "text-[#34C759] bg-[#34C759]/10"
+                : "text-[#FF3B30] bg-[#FF3B30]/10"
+            )}
+          >
+            {trend.positive ? "↑" : "↓"} {trend.value}
+          </span>
+        )}
       </div>
+
+      {/* Value */}
+      <p
+        className="text-[32px] sm:text-[34px] font-bold leading-none tracking-tight text-foreground"
+        style={{ fontFamily: '-apple-system, "SF Pro Display", "Space Grotesk", sans-serif', letterSpacing: "-0.5px" }}
+      >
+        {value}
+      </p>
+
+      {/* Title */}
+      <p className="mt-1 text-ios-subhead font-semibold text-foreground/80">{title}</p>
+
+      {/* Subtitle */}
+      {subtitle && (
+        <p className="mt-0.5 text-ios-caption1 text-muted-foreground">{subtitle}</p>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useCollection } from "@/hooks/useCollection";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,17 +35,8 @@ const typeLabel: Record<string, string> = {
   reminder: "Reminder",
 };
 
-const initialEvents: CalendarEvent[] = [
-  { id: "1", title: "Fix auth bug", description: "Fix the authentication flow bug", date: "2026-03-27", type: "task" },
-  { id: "2", title: "Google phone screen", description: "Initial phone screen with Google", date: "2026-03-28", type: "interview" },
-  { id: "3", title: "System Design milestone", description: "Complete system design module", date: "2026-03-30", type: "goal" },
-  { id: "4", title: "PR review deadline", description: "Review pending pull requests", date: "2026-03-27", type: "task" },
-  { id: "5", title: "DSA goal deadline", description: "Finish DSA practice set", date: "2026-04-01", type: "goal" },
-  { id: "6", title: "Microsoft round 2", description: "Second round interview", date: "2026-04-02", type: "interview" },
-];
-
 export default function CalendarPage() {
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
+  const { items: events, add, update, remove } = useCollection<CalendarEvent>('calendar_events', '_createdAt', 'desc');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
@@ -84,7 +76,7 @@ export default function CalendarPage() {
     setDialogOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!formTitle.trim()) {
       toast.error("Title is required");
       return;
@@ -96,30 +88,17 @@ export default function CalendarPage() {
     const dateStr = format(selectedDate, "yyyy-MM-dd");
 
     if (editingEvent) {
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === editingEvent.id
-            ? { ...e, title: formTitle, description: formDesc, type: formType, date: dateStr }
-            : e
-        )
-      );
+      await update(editingEvent.id, { title: formTitle, description: formDesc, type: formType, date: dateStr });
       toast.success("Event updated");
     } else {
-      const newEvent: CalendarEvent = {
-        id: crypto.randomUUID(),
-        title: formTitle,
-        description: formDesc,
-        type: formType,
-        date: dateStr,
-      };
-      setEvents((prev) => [...prev, newEvent]);
+      await add({ title: formTitle, description: formDesc, type: formType, date: dateStr });
       toast.success("Event created");
     }
     setDialogOpen(false);
   }
 
-  function handleDelete(id: string) {
-    setEvents((prev) => prev.filter((e) => e.id !== id));
+  async function handleDelete(id: string) {
+    await remove(id);
     setDeleteConfirm(null);
     toast.success("Event deleted");
   }

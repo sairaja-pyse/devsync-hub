@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useCollection } from "@/hooks/useCollection";
 import { Plus, GripVertical, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,51 +11,27 @@ import { cn } from "@/lib/utils";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { toast } from "sonner";
 
-interface Task {
+interface BoardTask {
   id: string;
   title: string;
   description: string;
   priority: "Low" | "Medium" | "High";
   project: string;
   dueDate: string;
+  columnId: string;
+  order: number;
 }
 
 interface Column {
   id: string;
   title: string;
   color: string;
-  tasks: Task[];
 }
 
-const initialColumns: Column[] = [
-  {
-    id: "backlog",
-    title: "Backlog",
-    color: "bg-muted-foreground",
-    tasks: [
-      { id: "1", title: "Set up CI/CD pipeline", description: "Configure GitHub Actions", priority: "Medium", project: "DevOps", dueDate: "2026-04-05" },
-      { id: "2", title: "Write API documentation", description: "Document REST endpoints", priority: "Low", project: "Backend", dueDate: "2026-04-10" },
-    ],
-  },
-  {
-    id: "progress",
-    title: "In Progress",
-    color: "bg-primary",
-    tasks: [
-      { id: "3", title: "Implement auth flow", description: "OAuth + email/password", priority: "High", project: "Auth Service", dueDate: "2026-03-30" },
-      { id: "4", title: "Design dashboard UI", description: "Create mockups and components", priority: "Medium", project: "Frontend", dueDate: "2026-04-01" },
-      { id: "5", title: "Optimize DB queries", description: "Add indexes and optimize N+1", priority: "High", project: "Backend", dueDate: "2026-03-29" },
-    ],
-  },
-  {
-    id: "done",
-    title: "Done",
-    color: "bg-success",
-    tasks: [
-      { id: "6", title: "Setup project repo", description: "Initialize monorepo structure", priority: "Low", project: "DevOps", dueDate: "2026-03-20" },
-      { id: "7", title: "Create user model", description: "Database schema for users", priority: "Medium", project: "Backend", dueDate: "2026-03-22" },
-    ],
-  },
+const COLUMNS: Column[] = [
+  { id: "backlog",  title: "Backlog",     color: "bg-muted-foreground" },
+  { id: "progress", title: "In Progress", color: "bg-primary"          },
+  { id: "done",     title: "Done",        color: "bg-success"          },
 ];
 
 const priorityColor: Record<string, string> = {
@@ -63,78 +40,93 @@ const priorityColor: Record<string, string> = {
   Low: "bg-success/10 text-success border-success/20",
 };
 
-const emptyTask: Omit<Task, "id"> = {
+const emptyTaskForm = {
   title: "",
   description: "",
-  priority: "Medium",
+  priority: "Medium" as BoardTask["priority"],
   project: "",
   dueDate: "",
 };
 
 export default function Board() {
-  const [columns, setColumns] = useState<Column[]>(initialColumns);
+  const { items: tasks, add, update, remove } = useCollection<BoardTask>('board_tasks', '_createdAt', 'asc');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingTask, setEditingTask] = useState<BoardTask | null>(null);
   const [targetColumn, setTargetColumn] = useState<string>("backlog");
-  const [formData, setFormData] = useState<Omit<Task, "id">>(emptyTask);
+  const [formData, setFormData] = useState(emptyTaskForm);
 
-  const onDragEnd = (result: DropResult) => {
+  const tasksByColumn = useMemo(() => {
+    const map: Record<string, BoardTask[]> = {};
+    for (const col of COLUMNS) {
+      map[col.id] = tasks
+        .filter((t) => t.columnId === col.id)
+        .sort((a, b) => a.order - b.order);
+    }
+    return map;
+  }, [tasks]);
+
+  const onDragEnd = async (result: DropResult) => {
     const { source, destination } = result;
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-    const newColumns = [...columns];
-    const srcCol = newColumns.find((c) => c.id === source.droppableId)!;
-    const destCol = newColumns.find((c) => c.id === destination.droppableId)!;
-    const [moved] = srcCol.tasks.splice(source.index, 1);
-    destCol.tasks.splice(destination.index, 0, moved);
-    setColumns(newColumns);
+    const srcTasks = [...tasksByColumn[source.droppableId]];
+    const destTasks = source.droppableId === destination.droppableId
+      ? srcTasks
+      : [...tasksByColumn[destination.droppableId]];
+
+    const [moved] = srcTasks.splice(source.index, 1);
+    destTasks.splice(destination.index, 0, moved);
+
+    const updates: Promise<void>[] = [];
 
     if (source.droppableId !== destination.droppableId) {
+      updates.push(update(moved.id, { columnId: destination.droppableId, order: destination.index }));
+      const destCol = COLUMNS.find((c) => c.id === destination.droppableId)!;
       toast.success(`Moved "${moved.title}" to ${destCol.title}`);
     }
+
+    destTasks.forEach((t, i) => {
+      if (t.order !== i || t.columnId !== destination.droppableId) {
+        updates.push(update(t.id, { columnId: destination.droppableId, order: i }));
+      }
+    });
+
+    await Promise.all(updates);
   };
 
   const openCreate = (columnId: string) => {
     setEditingTask(null);
     setTargetColumn(columnId);
-    setFormData(emptyTask);
+    setFormData(emptyTaskForm);
     setDialogOpen(true);
   };
 
-  const openEdit = (task: Task, columnId: string) => {
+  const openEdit = (task: BoardTask, columnId: string) => {
     setEditingTask(task);
     setTargetColumn(columnId);
     setFormData({ title: task.title, description: task.description, priority: task.priority, project: task.project, dueDate: task.dueDate });
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.title.trim()) {
       toast.error("Title is required");
       return;
     }
-    const newColumns = [...columns];
     if (editingTask) {
-      const col = newColumns.find((c) => c.tasks.some((t) => t.id === editingTask.id))!;
-      const idx = col.tasks.findIndex((t) => t.id === editingTask.id);
-      col.tasks[idx] = { ...editingTask, ...formData };
+      await update(editingTask.id, { ...formData });
       toast.success("Task updated");
     } else {
-      const col = newColumns.find((c) => c.id === targetColumn)!;
-      col.tasks.push({ id: crypto.randomUUID(), ...formData });
+      const colTasks = tasksByColumn[targetColumn] ?? [];
+      await add({ ...formData, columnId: targetColumn, order: colTasks.length });
       toast.success("Task created");
     }
-    setColumns(newColumns);
     setDialogOpen(false);
   };
 
-  const handleDelete = (taskId: string) => {
-    const newColumns = columns.map((col) => ({
-      ...col,
-      tasks: col.tasks.filter((t) => t.id !== taskId),
-    }));
-    setColumns(newColumns);
+  const handleDelete = async (taskId: string) => {
+    await remove(taskId);
     toast.success("Task deleted");
   };
 
@@ -153,12 +145,12 @@ export default function Board() {
 
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory">
-          {columns.map((col) => (
+          {COLUMNS.map((col) => (
             <div key={col.id} className="min-w-[280px] sm:min-w-[300px] flex-1 snap-start">
               <div className="flex items-center gap-2 mb-3 px-1">
                 <div className={cn("h-2.5 w-2.5 rounded-full", col.color)} />
                 <h3 className="text-sm font-semibold">{col.title}</h3>
-                <span className="text-xs text-muted-foreground ml-auto">{col.tasks.length}</span>
+                <span className="text-xs text-muted-foreground ml-auto">{(tasksByColumn[col.id] ?? []).length}</span>
               </div>
 
               <Droppable droppableId={col.id}>
@@ -171,7 +163,7 @@ export default function Board() {
                       snapshot.isDraggingOver && "bg-accent/50 ring-2 ring-primary/20"
                     )}
                   >
-                    {col.tasks.map((task, index) => (
+                    {(tasksByColumn[col.id] ?? []).map((task, index) => (
                       <Draggable key={task.id} draggableId={task.id} index={index}>
                         {(provided, snapshot) => (
                           <div
@@ -250,7 +242,7 @@ export default function Board() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Priority</Label>
-                <Select value={formData.priority} onValueChange={(v) => setFormData({ ...formData, priority: v as Task["priority"] })}>
+                <Select value={formData.priority} onValueChange={(v) => setFormData({ ...formData, priority: v as BoardTask["priority"] })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Low">Low</SelectItem>

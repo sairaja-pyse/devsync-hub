@@ -1,269 +1,603 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
-  CheckSquare,
-  Target,
-  Briefcase,
-  Zap,
-  Clock,
-  TrendingUp,
-  ArrowRight,
-  Flame,
-  Sparkles,
-  Circle,
-  CheckCircle2,
+  CheckSquare, Target, Briefcase, Flame, ArrowRight,
+  Circle, CheckCircle2, ChevronRight, Sparkles,
+  Clock, TrendingUp, BookOpen, FileText, Image, Pin,
 } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
+import { getAllMeta, type ResourceMeta } from "@/lib/resourceStorage";
+import { CATEGORY_STYLES } from "@/pages/ResourceVault";
 
-const todayTasks = [
-  { id: 1, title: "Fix authentication bug", priority: "High", project: "Auth Service", done: false },
-  { id: 2, title: "Review PR #234", priority: "Medium", project: "Frontend", done: false },
-  { id: 3, title: "Write unit tests for API", priority: "Low", project: "Backend", done: false },
-];
+/* ─── Data ─── */
+const todayTasks: { id: number; title: string; priority: string; project: string; done: boolean }[] = [];
 
-const activeGoals = [
-  { id: 1, title: "Crack SDE Job", progress: 65, category: "Career", color: "primary" },
-  { id: 2, title: "Learn System Design", progress: 40, category: "Learning", color: "warning" },
-  { id: 3, title: "Master TypeScript", progress: 80, category: "Skills", color: "success" },
-];
+const activeGoals: { id: number; title: string; progress: number; category: string; color: string }[] = [];
 
-const recentApps = [
-  { company: "Google", role: "SDE II", status: "Interview", logo: "G" },
-  { company: "Meta", role: "Frontend Engineer", status: "Applied", logo: "M" },
-  { company: "Stripe", role: "Full Stack", status: "Offer", logo: "S" },
-];
+const recentApps: { company: string; role: string; status: string; logo: string; color: string }[] = [];
 
-const priorityConfig: Record<string, { class: string; dot: string }> = {
-  High: { class: "bg-destructive/10 text-destructive border-destructive/20", dot: "bg-destructive" },
-  Medium: { class: "bg-warning/10 text-warning border-warning/20", dot: "bg-warning" },
-  Low: { class: "bg-success/10 text-success border-success/20", dot: "bg-success" },
+const priorityDot: Record<string, string> = {
+  High:   "#FF3B30",
+  Medium: "#FF9500",
+  Low:    "#34C759",
 };
 
-const statusConfig: Record<string, { class: string; bg: string }> = {
-  Applied: { class: "text-info", bg: "bg-info/10" },
-  Interview: { class: "text-warning", bg: "bg-warning/10" },
-  Offer: { class: "text-success", bg: "bg-success/10" },
-  Rejected: { class: "text-destructive", bg: "bg-destructive/10" },
+const statusStyle: Record<string, { bg: string; text: string }> = {
+  Applied:   { bg: "rgba(0,122,255,0.10)",   text: "#007AFF" },
+  Interview: { bg: "rgba(255,149,0,0.10)",   text: "#FF9500" },
+  Offer:     { bg: "rgba(52,199,89,0.10)",   text: "#34C759" },
+  Rejected:  { bg: "rgba(255,59,48,0.10)",   text: "#FF3B30" },
 };
 
 function getGreeting() {
   const h = new Date().getHours();
+  if (h < 5)  return "Good night";
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
 }
 
+/* ─── Activity Ring (Health-app style) ─── */
+function ActivityRing({
+  progress,
+  color,
+  trackOpacity = 0.15,
+  size = 56,
+  stroke = 6,
+  children,
+}: {
+  progress: number;
+  color: string;
+  trackOpacity?: number;
+  size?: number;
+  stroke?: number;
+  children?: React.ReactNode;
+}) {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (Math.min(progress, 100) / 100) * circ;
+  const halfSize = size / 2;
+
+  const [animated, setAnimated] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setAnimated(true), 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        {/* Track */}
+        <circle
+          cx={halfSize} cy={halfSize} r={r}
+          fill="none"
+          stroke={color}
+          strokeOpacity={trackOpacity}
+          strokeWidth={stroke}
+        />
+        {/* Progress arc */}
+        <circle
+          cx={halfSize} cy={halfSize} r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={animated ? offset : circ}
+          style={{ transition: "stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1)" }}
+        />
+      </svg>
+      {children && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Three-ring activity stack (like Fitness app) ─── */
+function ActivityRings({ tasks, goals, streak }: { tasks: number; goals: number; streak: number }) {
+  const outerSize = 96;
+  const midSize   = 72;
+  const innerSize = 48;
+  const stroke    = 9;
+
+  const rings = [
+    { progress: tasks,  color: "#FF3B30", size: outerSize, stroke },
+    { progress: goals,  color: "#34C759", size: midSize,   stroke: stroke - 1 },
+    { progress: streak, color: "#007AFF", size: innerSize, stroke: stroke - 2 },
+  ];
+
+  return (
+    <div className="relative" style={{ width: outerSize, height: outerSize }}>
+      {rings.map(({ progress, color, size, stroke: sw }, i) => {
+        const offset = (outerSize - size) / 2;
+        return (
+          <div
+            key={i}
+            className="absolute"
+            style={{ top: offset, left: offset, width: size, height: size }}
+          >
+            <ActivityRing progress={progress} color={color} size={size} stroke={sw} trackOpacity={0.18} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Pinned Resource Card ─── */
+function PinnedResourceCard({ meta }: { meta: ResourceMeta }) {
+  const s     = CATEGORY_STYLES[meta.category];
+  const isImg = meta.mimeType.startsWith("image/");
+
+  return (
+    <Link to="/vault" className="group apple-widget p-0 overflow-hidden hover:scale-[1.02] active:scale-[0.98] transition-transform duration-200 flex-shrink-0 w-36 sm:w-40">
+      {/* Preview */}
+      <div className="relative h-24 overflow-hidden bg-secondary/30">
+        {isImg && meta.thumbnail ? (
+          <img src={meta.thumbnail} alt={meta.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center" style={{ background: `linear-gradient(145deg, ${s.color}18, ${s.color}08)` }}>
+            <FileText className="h-10 w-10 opacity-30" style={{ color: s.color }} />
+          </div>
+        )}
+        <div className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full flex items-center justify-center" style={{ background: "rgba(0,122,255,0.85)", backdropFilter: "blur(6px)" }}>
+          <Pin className="h-2.5 w-2.5 text-white" fill="white" />
+        </div>
+      </div>
+      {/* Info */}
+      <div className="px-3 py-2">
+        <p className="text-[12px] font-semibold text-foreground truncate">{meta.name.replace(/\.[^.]+$/, "")}</p>
+        <span className="text-[10px] font-semibold" style={{ color: s.color }}>{meta.category}</span>
+      </div>
+    </Link>
+  );
+}
+
+/* ─── Main Dashboard ─── */
 export default function Dashboard() {
   const [tasks, setTasks] = useState(todayTasks);
+  const [pinnedResources] = useState<ResourceMeta[]>(() =>
+    getAllMeta().filter((r) => r.pinned).slice(0, 6),
+  );
   const greeting = useMemo(getGreeting, []);
-  const completedCount = tasks.filter((t) => t.done).length;
+  const done = tasks.filter((t) => t.done).length;
+  const pending = tasks.length - done;
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
   function toggleTask(id: number) {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 animate-fade-in pb-24 sm:pb-8">
-      {/* Hero Greeting */}
-      <div className="relative overflow-hidden rounded-2xl gradient-primary p-6 sm:p-8 text-primary-foreground">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,hsl(var(--primary-glow)/0.3),transparent_60%)]" />
-        <div className="absolute -bottom-6 -right-6 h-32 w-32 rounded-full bg-primary-foreground/5 blur-xl" />
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="h-4 w-4 opacity-80" />
-            <span className="text-xs font-medium opacity-80 uppercase tracking-wider">Dashboard</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            {greeting} 👋
-          </h1>
-          <p className="text-sm opacity-80 mt-1.5 max-w-md">
-            You have {tasks.filter((t) => !t.done).length} pending tasks and {activeGoals.length} active goals. Let's make progress!
-          </p>
-          <div className="flex items-center gap-2 mt-4">
-            <div className="flex items-center gap-1.5 bg-primary-foreground/15 rounded-full px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
-              <Flame className="h-3.5 w-3.5" />
-              7 day streak
+    <div
+      className="p-4 sm:p-5 lg:p-6 space-y-4 animate-fade-in pb-24 sm:pb-8 max-w-7xl mx-auto"
+      style={{ minHeight: "100%" }}
+    >
+
+      {/* ══════════════════════════════════════════
+          ROW 1 — Hero Greeting Widget
+      ══════════════════════════════════════════ */}
+      <div className="relative overflow-hidden rounded-[24px] p-6 sm:p-8" style={{
+        background: "linear-gradient(145deg, #409CFF 0%, #007AFF 50%, #5856D6 100%)",
+        boxShadow: "0 4px 24px rgba(0,122,255,0.4), 0 12px 48px rgba(0,122,255,0.2)",
+      }}>
+        {/* Decorative orb */}
+        <div className="absolute -top-12 -right-12 h-48 w-48 rounded-full opacity-20"
+          style={{ background: "radial-gradient(circle, #fff, transparent 70%)" }} />
+        <div className="absolute bottom-0 right-8 h-24 w-24 rounded-full opacity-10"
+          style={{ background: "radial-gradient(circle, #fff, transparent 70%)" }} />
+
+        <div className="relative flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="h-3.5 w-3.5 text-white/70" />
+              <span className="text-ios-caption1 text-white/70 tracking-wider font-medium uppercase">
+                {today}
+              </span>
             </div>
-            <div className="flex items-center gap-1.5 bg-primary-foreground/15 rounded-full px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
-              <TrendingUp className="h-3.5 w-3.5" />
-              +12% this week
+            <h1
+              className="text-white leading-tight mb-2"
+              style={{
+                fontFamily: '-apple-system, "SF Pro Display", "Space Grotesk", sans-serif',
+                fontSize: "clamp(26px, 5vw, 38px)",
+                fontWeight: 700,
+                letterSpacing: "-0.5px",
+              }}
+            >
+              {greeting} 👋
+            </h1>
+            <p className="text-white/75 text-ios-callout max-w-sm">
+              {pending > 0 ? `You have ${pending} pending tasks` : tasks.length === 0 ? "Add your first task to get started" : "All tasks done!"} · {activeGoals.length} active {activeGoals.length === 1 ? "goal" : "goals"}
+            </p>
+
+            {/* Streak + Progress pills */}
+            <div className="flex flex-wrap gap-2 mt-4">
+              <div className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white"
+                style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(10px)" }}>
+                <Flame className="h-3.5 w-3.5" />
+                {tasks.filter(t => t.done).length} done today
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white"
+                style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(10px)" }}>
+                <TrendingUp className="h-3.5 w-3.5" />
+                {tasks.length} tasks
+              </div>
+            </div>
+          </div>
+
+          {/* Activity Rings — visible on sm+ */}
+          <div className="hidden sm:flex flex-col items-center gap-2 shrink-0">
+            <ActivityRings
+              tasks={tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0}
+              goals={activeGoals.length > 0 ? Math.round(activeGoals.reduce((s, g) => s + g.progress, 0) / activeGoals.length) : 0}
+              streak={0}
+            />
+            <div className="flex flex-col gap-0.5 text-right">
+              {[
+                { label: "Tasks",  color: "#FF3B30" },
+                { label: "Goals",  color: "#34C759" },
+                { label: "Streak", color: "#007AFF" },
+              ].map(({ label, color }) => (
+                <div key={label} className="flex items-center gap-1.5 justify-end">
+                  <span className="text-[10px] text-white/70 font-medium">{label}</span>
+                  <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard
-          title="Tasks Today"
-          value={tasks.length}
-          subtitle={`${completedCount} completed`}
-          icon={CheckSquare}
-          trend={{ value: "12%", positive: true }}
-          gradient="blue"
-        />
-        <StatCard
-          title="Active Goals"
-          value={5}
-          subtitle="2 near deadline"
-          icon={Target}
-          gradient="green"
-        />
-        <StatCard
-          title="Applications"
-          value={12}
-          subtitle="3 interviews"
-          icon={Briefcase}
-          trend={{ value: "4 this week", positive: true }}
-          gradient="amber"
-        />
-        <StatCard
-          title="Streak"
-          value="7 days"
-          subtitle="Keep it up!"
-          icon={Zap}
-          gradient="purple"
-        />
+      {/* ══════════════════════════════════════════
+          ROW 2 — 4 Stat Widgets (iOS small widget grid)
+      ══════════════════════════════════════════ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          {
+            title: "Tasks Today", value: tasks.length,
+            subtitle: `${done} completed`,
+            icon: CheckSquare, gradient: "blue" as const,
+          },
+          {
+            title: "Active Goals", value: activeGoals.length,
+            subtitle: activeGoals.length > 0 ? `${activeGoals.filter(g => g.progress >= 70).length} near done` : "No goals yet",
+            icon: Target, gradient: "green" as const,
+          },
+          {
+            title: "Applications", value: recentApps.length,
+            subtitle: recentApps.length > 0 ? `${recentApps.filter(a => a.status === "Interview").length} interviews` : "No applications yet",
+            icon: Briefcase, gradient: "amber" as const,
+          },
+          {
+            title: "Completed", value: done,
+            subtitle: tasks.length > 0 ? `${Math.round((done / tasks.length) * 100)}% done` : "Add tasks to start",
+            icon: Flame, gradient: "purple" as const,
+          },
+        ].map((card, i) => (
+          <StatCard
+            key={card.title}
+            {...card}
+            className={cn("animate-spring-in", `stagger-${i + 1}`)}
+          />
+        ))}
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid lg:grid-cols-5 gap-4 sm:gap-6">
-        {/* Today's Tasks - wider */}
-        <div className="lg:col-span-3 rounded-2xl border bg-card shadow-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold flex items-center gap-2 text-base">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Clock className="h-4 w-4 text-primary" />
+      {/* ══════════════════════════════════════════
+          ROW 3 — Tasks + Goals widgets
+      ══════════════════════════════════════════ */}
+      <div className="grid lg:grid-cols-5 gap-3">
+
+        {/* ── Today's Tasks widget ── */}
+        <div className="lg:col-span-3 apple-widget p-0 overflow-hidden">
+          {/* Widget header */}
+          <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 squircle-sm apple-icon-blue flex items-center justify-center">
+                <Clock className="h-4.5 w-4.5 text-white" strokeWidth={2} />
               </div>
-              Today's Tasks
-            </h2>
+              <div>
+                <p className="text-ios-headline font-bold text-foreground">Today's Tasks</p>
+                <p className="text-ios-caption1 text-muted-foreground">{done}/{tasks.length} complete</p>
+              </div>
+            </div>
             <Link to="/board">
-              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary gap-1">
-                View all <ArrowRight className="h-3 w-3" />
-              </Button>
+              <button className="flex items-center gap-1 text-[#007AFF] text-ios-subhead font-semibold hover:opacity-70 transition-opacity">
+                All <ChevronRight className="h-4 w-4" />
+              </button>
             </Link>
           </div>
 
-          {/* Mini progress */}
-          <div className="flex items-center gap-3">
-            <Progress value={(completedCount / tasks.length) * 100} className="h-1.5 flex-1" />
-            <span className="text-xs font-mono font-medium text-muted-foreground">
-              {completedCount}/{tasks.length}
-            </span>
+          {/* Progress bar */}
+          <div className="px-5 pb-4">
+            <div className="ios-progress">
+              <div
+                className="ios-progress-fill"
+                style={{
+                  width: `${tasks.length > 0 ? (done / tasks.length) * 100 : 0}%`,
+                  background: "linear-gradient(90deg, #409CFF, #007AFF)",
+                }}
+              />
+            </div>
           </div>
 
-          <div className="space-y-2">
+          {/* Task list with iOS inset separators */}
+          <div>
+            {tasks.length === 0 && (
+              <div className="px-5 py-8 flex flex-col items-center text-center">
+                <CheckSquare className="h-9 w-9 text-muted-foreground/20 mb-2" />
+                <p className="text-ios-subhead font-semibold text-muted-foreground/60">No tasks yet</p>
+                <p className="text-ios-caption1 text-muted-foreground/40 mt-0.5">Go to Board to add tasks</p>
+              </div>
+            )}
             {tasks.map((task) => (
               <button
                 key={task.id}
                 onClick={() => toggleTask(task.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 p-3.5 rounded-xl transition-all text-left group",
+                  "w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors ios-separator",
                   task.done
-                    ? "bg-muted/50 opacity-60"
-                    : "bg-secondary/50 hover:bg-secondary hover:shadow-sm"
+                    ? "opacity-50"
+                    : "hover:bg-secondary/50 active:bg-secondary"
                 )}
               >
-                <div className="shrink-0">
+                {/* Checkbox */}
+                <div className="shrink-0 w-10 flex items-center justify-center">
                   {task.done ? (
-                    <CheckCircle2 className="h-5 w-5 text-success" />
+                    <CheckCircle2 className="h-6 w-6" style={{ color: "#007AFF" }} />
                   ) : (
-                    <Circle className="h-5 w-5 text-muted-foreground/40 group-hover:text-primary/60 transition-colors" />
+                    <Circle className="h-6 w-6 text-muted-foreground/30" />
                   )}
                 </div>
+
+                {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <p className={cn("text-sm font-medium truncate", task.done && "line-through")}>{task.title}</p>
-                  <p className="text-[11px] text-muted-foreground">{task.project}</p>
+                  <p className={cn(
+                    "text-ios-subhead font-medium text-foreground",
+                    task.done && "line-through text-muted-foreground"
+                  )}>
+                    {task.title}
+                  </p>
+                  <p className="text-ios-caption1 text-muted-foreground">{task.project}</p>
                 </div>
-                <div className={cn("h-2 w-2 rounded-full shrink-0", priorityConfig[task.priority].dot)} />
+
+                {/* Priority dot */}
+                <div
+                  className="h-2.5 w-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: priorityDot[task.priority] }}
+                />
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Goals */}
-        <div className="lg:col-span-2 rounded-2xl border bg-card shadow-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold flex items-center gap-2 text-base">
-              <div className="h-8 w-8 rounded-lg bg-success/10 flex items-center justify-center">
-                <Target className="h-4 w-4 text-success" />
-              </div>
-              Goals
-            </h2>
-            <Link to="/goals">
-              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary gap-1">
-                View all <ArrowRight className="h-3 w-3" />
+          {/* Footer */}
+          <div className="px-5 py-3.5 border-t border-border/50">
+            <Link to="/board">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full rounded-xl text-[#007AFF] hover:bg-[#007AFF]/8 font-semibold"
+              >
+                View all tasks <ArrowRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             </Link>
           </div>
-          <div className="space-y-4">
+        </div>
+
+        {/* ── Goals widget ── */}
+        <div className="lg:col-span-2 apple-widget p-0 overflow-hidden flex flex-col">
+          {/* Widget header */}
+          <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 squircle-sm apple-icon-green flex items-center justify-center">
+                <Target className="h-4.5 w-4.5 text-white" strokeWidth={2} />
+              </div>
+              <div>
+                <p className="text-ios-headline font-bold text-foreground">Goals</p>
+                <p className="text-ios-caption1 text-muted-foreground">{activeGoals.length} active</p>
+              </div>
+            </div>
+            <Link to="/goals">
+              <button className="flex items-center gap-1 text-[#007AFF] text-ios-subhead font-semibold hover:opacity-70 transition-opacity">
+                All <ChevronRight className="h-4 w-4" />
+              </button>
+            </Link>
+          </div>
+
+          {/* Goal rows with activity rings */}
+          <div className="flex-1 divide-y divide-border/50">
+            {activeGoals.length === 0 && (
+              <div className="px-5 py-8 flex flex-col items-center text-center">
+                <Target className="h-9 w-9 text-muted-foreground/20 mb-2" />
+                <p className="text-ios-subhead font-semibold text-muted-foreground/60">No goals yet</p>
+                <p className="text-ios-caption1 text-muted-foreground/40 mt-0.5">Go to Goals to set one</p>
+              </div>
+            )}
             {activeGoals.map((goal) => (
-              <div key={goal.id} className="space-y-2.5 p-3 rounded-xl bg-secondary/30">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">{goal.title}</p>
-                  <span className="text-xs font-mono font-bold text-primary">
-                    {goal.progress}%
+              <div key={goal.id} className="flex items-center gap-4 px-5 py-4">
+                <ActivityRing progress={goal.progress} color={goal.color} size={52} stroke={5} trackOpacity={0.15}>
+                  <span
+                    className="text-[11px] font-bold"
+                    style={{ color: goal.color }}
+                  >
+                    {goal.progress}
                   </span>
-                </div>
-                <Progress value={goal.progress} className="h-2" />
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="text-[10px] h-5">{goal.category}</Badge>
-                  <span className="text-[10px] text-muted-foreground">
-                    {goal.progress >= 70 ? "Almost there!" : "In progress"}
-                  </span>
+                </ActivityRing>
+                <div className="flex-1 min-w-0">
+                  <p className="text-ios-subhead font-semibold text-foreground truncate">{goal.title}</p>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span
+                      className="text-ios-caption1 font-medium px-2 py-0.5 rounded-full"
+                      style={{
+                        background: `${goal.color}18`,
+                        color: goal.color,
+                      }}
+                    >
+                      {goal.category}
+                    </span>
+                    <span className="text-ios-caption2 text-muted-foreground">
+                      {goal.progress >= 70 ? "Almost there!" : "In progress"}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Footer */}
+          <div className="px-5 py-3.5 border-t border-border/50">
+            <Link to="/goals">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full rounded-xl text-[#007AFF] hover:bg-[#007AFF]/8 font-semibold"
+              >
+                Manage goals <ArrowRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* Job Applications */}
-      <div className="rounded-2xl border bg-card shadow-card p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold flex items-center gap-2 text-base">
-            <div className="h-8 w-8 rounded-lg bg-warning/10 flex items-center justify-center">
-              <Briefcase className="h-4 w-4 text-warning" />
+      {/* ══════════════════════════════════════════
+          ROW 4 — Recent Applications widget
+      ══════════════════════════════════════════ */}
+      <div className="apple-widget p-0 overflow-hidden">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 flex items-center justify-between border-b border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 squircle-sm apple-icon-orange flex items-center justify-center">
+              <Briefcase className="h-4.5 w-4.5 text-white" strokeWidth={2} />
             </div>
-            Recent Applications
-          </h2>
+            <div>
+              <p className="text-ios-headline font-bold text-foreground">Recent Applications</p>
+              <p className="text-ios-caption1 text-muted-foreground">{recentApps.length} shown</p>
+            </div>
+          </div>
           <Link to="/jobs">
-            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary gap-1">
-              View all <ArrowRight className="h-3 w-3" />
+            <button className="flex items-center gap-1 text-[#007AFF] text-ios-subhead font-semibold hover:opacity-70 transition-opacity">
+              All <ChevronRight className="h-4 w-4" />
+            </button>
+          </Link>
+        </div>
+
+        {/* Application rows */}
+        <div>
+          {recentApps.length === 0 && (
+            <div className="px-5 py-8 flex flex-col items-center text-center">
+              <Briefcase className="h-9 w-9 text-muted-foreground/20 mb-2" />
+              <p className="text-ios-subhead font-semibold text-muted-foreground/60">No applications yet</p>
+              <p className="text-ios-caption1 text-muted-foreground/40 mt-0.5">Go to Job Tracker to add one</p>
+            </div>
+          )}
+          {recentApps.map((app) => {
+            const style = statusStyle[app.status];
+            return (
+              <div
+                key={app.company}
+                className="flex items-center gap-4 px-5 py-4 ios-separator hover:bg-secondary/30 transition-colors cursor-pointer"
+              >
+                {/* Company logo squircle */}
+                <div
+                  className="h-11 w-11 squircle-sm flex items-center justify-center shrink-0 text-white font-bold text-base"
+                  style={{ background: `linear-gradient(145deg, ${app.color}dd, ${app.color})` }}
+                >
+                  {app.logo}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-ios-subhead font-semibold text-foreground">{app.company}</p>
+                  <p className="text-ios-caption1 text-muted-foreground">{app.role}</p>
+                </div>
+
+                {/* Status */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className="text-ios-caption1 font-semibold px-2.5 py-1 rounded-full"
+                    style={{ background: style.bg, color: style.text }}
+                  >
+                    {app.status}
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3.5 border-t border-border/50">
+          <Link to="/jobs">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full rounded-xl text-[#007AFF] hover:bg-[#007AFF]/8 font-semibold"
+            >
+              View all applications <ArrowRight className="h-3.5 w-3.5 ml-1" />
             </Button>
           </Link>
         </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {recentApps.map((app, i) => (
-            <div
-              key={i}
-              className="group p-4 rounded-xl bg-secondary/30 hover:bg-secondary/60 transition-all hover-lift space-y-3"
-            >
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "h-10 w-10 rounded-xl flex items-center justify-center font-bold text-sm",
-                  statusConfig[app.status].bg,
-                  statusConfig[app.status].class
-                )}>
-                  {app.logo}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">{app.company}</p>
-                  <p className="text-xs text-muted-foreground truncate">{app.role}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <Badge variant="outline" className={cn("text-[10px]", statusConfig[app.status].class)}>
-                  {app.status}
-                </Badge>
-                <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-primary transition-colors" />
-              </div>
+      </div>
+
+      {/* ══════════════════════════════════════════
+          ROW 5 — Pinned Resources (Vault)
+      ══════════════════════════════════════════ */}
+      <div className="apple-widget p-0 overflow-hidden">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 flex items-center justify-between border-b border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 squircle-sm apple-icon-purple flex items-center justify-center">
+              <BookOpen className="h-4.5 w-4.5 text-white" strokeWidth={2} />
             </div>
-          ))}
+            <div>
+              <p className="text-ios-headline font-bold text-foreground">Resource Vault</p>
+              <p className="text-ios-caption1 text-muted-foreground">
+                {pinnedResources.length > 0 ? `${pinnedResources.length} pinned` : "Your files, one place"}
+              </p>
+            </div>
+          </div>
+          <Link to="/vault">
+            <button className="flex items-center gap-1 text-[#007AFF] text-ios-subhead font-semibold hover:opacity-70 transition-opacity">
+              Open <ChevronRight className="h-4 w-4" />
+            </button>
+          </Link>
+        </div>
+
+        {/* Pinned files horizontal scroll */}
+        {pinnedResources.length > 0 ? (
+          <div className="px-5 py-4 flex gap-3 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+            {pinnedResources.map((meta) => (
+              <PinnedResourceCard key={meta.id} meta={meta} />
+            ))}
+          </div>
+        ) : (
+          <div className="px-5 py-8 flex flex-col items-center text-center">
+            <div className="h-12 w-12 squircle-sm flex items-center justify-center mb-3" style={{ background: "rgba(175,82,222,0.08)" }}>
+              <Pin className="h-5 w-5 text-[#AF52DE] opacity-50" />
+            </div>
+            <p className="text-ios-subhead font-semibold text-foreground">No pinned files yet</p>
+            <p className="text-ios-caption1 text-muted-foreground mt-1 max-w-xs">
+              Add files in the Vault and pin them for quick access here
+            </p>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="px-5 py-3.5 border-t border-border/50">
+          <Link to="/vault">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full rounded-xl text-[#007AFF] hover:bg-[#007AFF]/8 font-semibold"
+            >
+              Go to Resource Vault <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          </Link>
         </div>
       </div>
     </div>
